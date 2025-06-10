@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mermaid Threat Model Visualization Tool</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -139,7 +137,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
-            z-index: 10;
+            z-index: 100;
         }
 
         .zoom-btn {
@@ -252,8 +250,6 @@
                 <span>🎯 Threat Model Visualization</span>
                 <div class="controls">
                     <button class="btn btn-small" onclick="resetZoom()">Reset View</button>
-                    <button class="btn btn-small" onclick="exportToPNG()">Export PNG</button>
-                    <button class="btn btn-small" onclick="exportToPDF()">Export PDF</button>
                 </div>
             </div>
             <div class="diagram-container">
@@ -414,16 +410,31 @@
                 // Clear previous diagram
                 diagramContainer.innerHTML = '';
                 
+                // Reset mermaid state
+                mermaid.mermaidAPI.reset();
+                
+                // Create a unique ID for this diagram
+                const diagramId = 'mermaid-diagram-' + Date.now();
+                
                 // Create a new div for the diagram
                 const diagramDiv = document.createElement('div');
                 diagramDiv.className = 'mermaid';
+                diagramDiv.id = diagramId;
                 diagramDiv.textContent = code;
                 diagramContainer.appendChild(diagramDiv);
 
-                // Render the diagram
-                await mermaid.run({
-                    nodes: [diagramDiv]
-                });
+                // Render the diagram with better error handling
+                try {
+                    await mermaid.run({
+                        nodes: [diagramDiv]
+                    });
+                } catch (renderError) {
+                    // Try alternative rendering method
+                    console.log('Trying alternative rendering method...');
+                    diagramDiv.innerHTML = '';
+                    const { svg } = await mermaid.render(diagramId, code);
+                    diagramDiv.innerHTML = svg;
+                }
 
                 showStatus('Diagram rendered successfully!', 'success');
                 
@@ -432,15 +443,31 @@
                 
             } catch (error) {
                 console.error('Mermaid rendering error:', error);
+                let errorMessage = 'Invalid mermaid syntax';
+                
+                // Better error message extraction
+                if (error && typeof error === 'object') {
+                    if (error.message) {
+                        errorMessage = error.message;
+                    } else if (error.str) {
+                        errorMessage = error.str;
+                    } else if (error.hash && error.hash.text) {
+                        errorMessage = `Syntax error: ${error.hash.text}`;
+                    } else {
+                        errorMessage = 'Diagram rendering failed - please check your mermaid syntax';
+                    }
+                }
+                
                 diagramContainer.innerHTML = `
                     <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #dc3545; font-size: 1.1rem; text-align: center; padding: 2rem;">
                         <div>
                             <strong>Error rendering diagram</strong><br>
-                            <small>${error.message || 'Invalid mermaid syntax'}</small>
+                            <small>${errorMessage}</small><br><br>
+                            <small style="color: #666;">Check your mermaid syntax and try again</small>
                         </div>
                     </div>
                 `;
-                showStatus('Error: Invalid mermaid syntax', 'error');
+                showStatus(`Error: ${errorMessage}`, 'error');
             }
         }
 
@@ -498,68 +525,6 @@
             const mermaidElement = diagramContainer.querySelector('.mermaid');
             if (mermaidElement) {
                 mermaidElement.style.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(${currentZoom})`;
-            }
-        }
-
-        // Export functions
-        async function exportToPNG() {
-            const mermaidElement = diagramContainer.querySelector('.mermaid svg');
-            if (!mermaidElement) {
-                showStatus('No diagram to export', 'error');
-                return;
-            }
-
-            showStatus('Generating PNG...', 'loading');
-
-            try {
-                const canvas = await html2canvas(mermaidElement, {
-                    backgroundColor: 'white',
-                    scale: 2,
-                    useCORS: true
-                });
-
-                const link = document.createElement('a');
-                link.download = 'threat-model.png';
-                link.href = canvas.toDataURL();
-                link.click();
-
-                showStatus('PNG exported successfully!', 'success');
-            } catch (error) {
-                console.error('Export error:', error);
-                showStatus('Export failed', 'error');
-            }
-        }
-
-        async function exportToPDF() {
-            const mermaidElement = diagramContainer.querySelector('.mermaid svg');
-            if (!mermaidElement) {
-                showStatus('No diagram to export', 'error');
-                return;
-            }
-
-            showStatus('Generating PDF...', 'loading');
-
-            try {
-                const canvas = await html2canvas(mermaidElement, {
-                    backgroundColor: 'white',
-                    scale: 2,
-                    useCORS: true
-                });
-
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                    unit: 'px',
-                    format: [canvas.width, canvas.height]
-                });
-
-                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-                pdf.save('threat-model.pdf');
-
-                showStatus('PDF exported successfully!', 'success');
-            } catch (error) {
-                console.error('Export error:', error);
-                showStatus('Export failed', 'error');
             }
         }
 
