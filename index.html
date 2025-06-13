@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mermaid Threat Model Visualization Tool</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -212,6 +214,170 @@
             background: #555;
         }
 
+        /* Fullscreen styling */
+        .fullscreen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #fff;
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+        }
+
+        .fullscreen-overlay.active {
+            display: flex;
+        }
+
+        .fullscreen-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .fullscreen-content {
+            flex: 1;
+            position: relative;
+            background: white;
+            overflow: hidden;
+        }
+
+        .fullscreen-diagram {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            padding: 2rem;
+            cursor: grab;
+        }
+
+        .fullscreen-diagram:active {
+            cursor: grabbing;
+        }
+
+        .fullscreen-controls {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 100;
+        }
+
+        .fullscreen-status {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            z-index: 10;
+        }
+
+        /* Filters Bar Styling */
+        .filters-bar {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            min-height: 60px;
+        }
+
+        .filters-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-weight: 600;
+            color: #495057;
+            white-space: nowrap;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-filter {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-filter:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .filter-checkboxes-horizontal {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-checkbox-horizontal {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .filter-checkbox-horizontal:hover {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: rgba(102, 126, 234, 0.2);
+        }
+
+        .filter-checkbox-horizontal input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .filter-checkbox-horizontal label {
+            cursor: pointer;
+            font-weight: 500;
+            color: #495057;
+            user-select: none;
+            font-size: 0.9rem;
+        }
+
+        .threat-actor-indicator-small {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #faa;
+            border: 1px solid #333;
+            flex-shrink: 0;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .container {
@@ -250,9 +416,22 @@
                 <span>🎯 Threat Model Visualization</span>
                 <div class="controls">
                     <button class="btn btn-small" onclick="resetZoom()">Reset View</button>
+                    <button class="btn btn-small" onclick="toggleFullscreen()">🔍 Fullscreen</button>
                 </div>
             </div>
             <div class="diagram-container">
+                <div class="filters-bar" id="filtersBar">
+                    <div class="filters-section">
+                        <span class="filter-label">🎯 Threat Actors:</span>
+                        <div class="filter-controls">
+                            <button class="btn-filter" onclick="selectAllThreatActors()">All</button>
+                            <button class="btn-filter" onclick="deselectAllThreatActors()">None</button>
+                        </div>
+                        <div id="threatActorFilters" class="filter-checkboxes-horizontal">
+                            <!-- Dynamic checkboxes will be inserted here -->
+                        </div>
+                    </div>
+                </div>
                 <div id="diagram"></div>
                 <div class="zoom-controls">
                     <button class="zoom-btn" onclick="zoomIn()">+</button>
@@ -261,6 +440,26 @@
                 </div>
                 <div id="status" class="status" style="display: none;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen overlay -->
+    <div class="fullscreen-overlay" id="fullscreenOverlay">
+        <div class="fullscreen-header">
+            <span>🎯 Threat Model Visualization - Fullscreen</span>
+            <div class="controls">
+                <button class="btn btn-small" onclick="resetZoomFullscreen()">Reset View</button>
+                <button class="btn btn-small" onclick="toggleFullscreen()">✕ Exit Fullscreen</button>
+            </div>
+        </div>
+        <div class="fullscreen-content">
+            <div class="fullscreen-diagram" id="fullscreenDiagram"></div>
+            <div class="fullscreen-controls">
+                <button class="zoom-btn" onclick="zoomInFullscreen()">+</button>
+                <button class="zoom-btn" onclick="zoomOutFullscreen()">−</button>
+                <button class="zoom-btn" onclick="resetZoomFullscreen()">⌂</button>
+            </div>
+            <div id="fullscreenStatus" class="fullscreen-status" style="display: none;"></div>
         </div>
     </div>
 
@@ -291,10 +490,20 @@
         let isDragging = false;
         let dragStart = { x: 0, y: 0 };
         let dragOffset = { x: 0, y: 0 };
+        let fullscreenZoom = 1;
+        let fullscreenDragStart = { x: 0, y: 0 };
+        let fullscreenDragOffset = { x: 0, y: 0 };
+        let fullscreenDragging = false;
+        let isFullscreen = false;
+        let threatActors = [];
+        let activeThreatActors = new Set();
 
         const editor = document.getElementById('editor');
         const diagramContainer = document.getElementById('diagram');
         const statusEl = document.getElementById('status');
+        const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+        const fullscreenDiagram = document.getElementById('fullscreenDiagram');
+        const fullscreenStatus = document.getElementById('fullscreenStatus');
 
         // Example threat model
         const exampleDiagram = `graph TD
@@ -376,6 +585,160 @@
     CFT -->|S,T,I,R<br>T1078,T1565| LambdaFuncs
     CFT -->|S,T,I,R<br>T1078,T1565| APIGW`;
 
+        // Threat Actor Filtering Functions
+        function extractThreatActors() {
+            const code = editor.value.trim();
+            if (!code) return;
+
+            threatActors = [];
+            activeThreatActors.clear();
+
+            // Look for threat actor patterns in the mermaid code
+            // Pattern 1: Nodes that contain "Threat" or "Actor" in their definition
+            const threatActorPattern1 = /(\w+)\[([^\]]*(?:threat|actor)[^\]]*)\]/gi;
+            let match;
+            
+            while ((match = threatActorPattern1.exec(code)) !== null) {
+                const id = match[1];
+                const label = match[2];
+                if (!threatActors.find(ta => ta.id === id)) {
+                    threatActors.push({ id, label: label.trim() });
+                    activeThreatActors.add(id);
+                }
+            }
+
+            // Pattern 2: Subgraphs containing "Threat Actors"
+            const subgraphPattern = /subgraph\s+(\w+)\s*\[([^\]]*(?:threat|actor)[^\]]*)\]([\s\S]*?)(?=subgraph|%%|$)/gi;
+            while ((match = subgraphPattern.exec(code)) !== null) {
+                const subgraphContent = match[3];
+                
+                // Extract nodes within this subgraph
+                const nodePattern = /(\w+)\[([^\]]+)\]/g;
+                let nodeMatch;
+                while ((nodeMatch = nodePattern.exec(subgraphContent)) !== null) {
+                    const id = nodeMatch[1];
+                    const label = nodeMatch[2];
+                    if (!threatActors.find(ta => ta.id === id)) {
+                        threatActors.push({ id, label: label.trim() });
+                        activeThreatActors.add(id);
+                    }
+                }
+            }
+
+            // Pattern 3: Common threat actor naming patterns
+            const commonThreatActorPattern = /(TA\d+|External|Internal|Insider|Attacker|Malicious|Threat)\w*/gi;
+            const nodeDefinitions = code.match(/(\w+)\[([^\]]+)\]/g) || [];
+            
+            nodeDefinitions.forEach(def => {
+                const nodeMatch = def.match(/(\w+)\[([^\]]+)\]/);
+                if (nodeMatch) {
+                    const id = nodeMatch[1];
+                    const label = nodeMatch[2];
+                    
+                    if (commonThreatActorPattern.test(label) || commonThreatActorPattern.test(id)) {
+                        if (!threatActors.find(ta => ta.id === id)) {
+                            threatActors.push({ id, label: label.trim() });
+                            activeThreatActors.add(id);
+                        }
+                    }
+                }
+            });
+
+            console.log('Extracted threat actors:', threatActors);
+        }
+
+        function setupThreatActorFilters() {
+            const filtersContainer = document.getElementById('threatActorFilters');
+            filtersContainer.innerHTML = '';
+
+            if (threatActors.length === 0) {
+                filtersContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 0.9rem;">No threat actors detected</div>';
+                return;
+            }
+
+            threatActors.forEach(actor => {
+                const filterDiv = document.createElement('div');
+                filterDiv.className = 'filter-checkbox-horizontal';
+                
+                filterDiv.innerHTML = `
+                    <input type="checkbox" id="ta_${actor.id}" checked onchange="toggleThreatActor('${actor.id}')">
+                    <label for="ta_${actor.id}">${actor.label}</label>
+                    <div class="threat-actor-indicator-small"></div>
+                `;
+                
+                filtersContainer.appendChild(filterDiv);
+            });
+        }
+
+        function toggleThreatActor(actorId) {
+            const checkbox = document.getElementById(`ta_${actorId}`);
+            
+            if (checkbox.checked) {
+                activeThreatActors.add(actorId);
+            } else {
+                activeThreatActors.delete(actorId);
+            }
+            
+            applyThreatActorFilters();
+        }
+
+        function applyThreatActorFilters() {
+            const svgElement = diagramContainer.querySelector('.mermaid svg');
+            if (!svgElement) return;
+
+            // Reset all elements to visible
+            const allElements = svgElement.querySelectorAll('g.node, g.edge');
+            allElements.forEach(el => {
+                el.style.opacity = '1';
+                el.style.display = 'block';
+            });
+
+            // Hide inactive threat actors and their connections
+            threatActors.forEach(actor => {
+                if (!activeThreatActors.has(actor.id)) {
+                    // Hide the threat actor node
+                    const nodeElement = svgElement.querySelector(`g.node[id*="${actor.id}"]`);
+                    if (nodeElement) {
+                        nodeElement.style.opacity = '0.1';
+                        nodeElement.style.transition = 'opacity 0.3s ease';
+                    }
+
+                    // Hide edges connected to this threat actor
+                    const edges = svgElement.querySelectorAll('g.edge');
+                    edges.forEach(edge => {
+                        const edgeId = edge.id || '';
+                        if (edgeId.includes(actor.id)) {
+                            edge.style.opacity = '0.1';
+                            edge.style.transition = 'opacity 0.3s ease';
+                        }
+                    });
+                }
+            });
+
+            // Update status
+            const activeCount = activeThreatActors.size;
+            const totalCount = threatActors.length;
+            showStatus(`Showing ${activeCount}/${totalCount} threat actors`, 'success');
+        }
+
+        function selectAllThreatActors() {
+            threatActors.forEach(actor => {
+                activeThreatActors.add(actor.id);
+                const checkbox = document.getElementById(`ta_${actor.id}`);
+                if (checkbox) checkbox.checked = true;
+            });
+            applyThreatActorFilters();
+        }
+
+        function deselectAllThreatActors() {
+            activeThreatActors.clear();
+            threatActors.forEach(actor => {
+                const checkbox = document.getElementById(`ta_${actor.id}`);
+                if (checkbox) checkbox.checked = false;
+            });
+            applyThreatActorFilters();
+        }
+
         // Load example diagram
         function loadExample() {
             editor.value = exampleDiagram;
@@ -437,6 +800,10 @@
                 }
 
                 showStatus('Diagram rendered successfully!', 'success');
+                
+                // Extract and setup threat actor filters
+                extractThreatActors();
+                setupThreatActorFilters();
                 
                 // Add pan functionality
                 addPanFunctionality();
@@ -528,6 +895,156 @@
             }
         }
 
+        // Export functions
+        async function exportToPNG() {
+            const svgElement = diagramContainer.querySelector('.mermaid svg');
+            if (!svgElement) {
+                showStatus('No diagram to export', 'error');
+                return;
+            }
+
+            showStatus('Generating PNG...', 'loading');
+
+            try {
+                // Clone the SVG to avoid modifying the original
+                const svgClone = svgElement.cloneNode(true);
+                
+                // Get SVG dimensions
+                const svgRect = svgElement.getBoundingClientRect();
+                const svgWidth = svgRect.width || 800;
+                const svgHeight = svgRect.height || 600;
+                
+                // Set explicit dimensions on the clone
+                svgClone.setAttribute('width', svgWidth);
+                svgClone.setAttribute('height', svgHeight);
+                
+                // Convert SVG to data URL
+                const svgData = new XMLSerializer().serializeToString(svgClone);
+                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+                const svgUrl = URL.createObjectURL(svgBlob);
+                
+                // Create canvas and draw SVG
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const scale = 2; // Higher resolution
+                
+                canvas.width = svgWidth * scale;
+                canvas.height = svgHeight * scale;
+                ctx.scale(scale, scale);
+                
+                // Set white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, svgWidth, svgHeight);
+                
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                    
+                    // Download the image
+                    const link = document.createElement('a');
+                    link.download = 'threat-model.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    
+                    // Clean up
+                    URL.revokeObjectURL(svgUrl);
+                    showStatus('PNG exported successfully!', 'success');
+                };
+                
+                img.onerror = function() {
+                    URL.revokeObjectURL(svgUrl);
+                    showStatus('PNG export failed', 'error');
+                };
+                
+                img.src = svgUrl;
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                showStatus('PNG export failed', 'error');
+            }
+        }
+
+        async function exportToPDF() {
+            const svgElement = diagramContainer.querySelector('.mermaid svg');
+            if (!svgElement) {
+                showStatus('No diagram to export', 'error');
+                return;
+            }
+
+            showStatus('Generating PDF...', 'loading');
+
+            try {
+                // Clone the SVG to avoid modifying the original
+                const svgClone = svgElement.cloneNode(true);
+                
+                // Get SVG dimensions
+                const svgRect = svgElement.getBoundingClientRect();
+                const svgWidth = svgRect.width || 800;
+                const svgHeight = svgRect.height || 600;
+                
+                // Set explicit dimensions on the clone
+                svgClone.setAttribute('width', svgWidth);
+                svgClone.setAttribute('height', svgHeight);
+                
+                // Convert SVG to data URL
+                const svgData = new XMLSerializer().serializeToString(svgClone);
+                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+                const svgUrl = URL.createObjectURL(svgBlob);
+                
+                // Create canvas for PDF
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const scale = 2; // Higher resolution
+                
+                canvas.width = svgWidth * scale;
+                canvas.height = svgHeight * scale;
+                ctx.scale(scale, scale);
+                
+                // Set white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, svgWidth, svgHeight);
+                
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                    
+                    // Create PDF
+                    const { jsPDF } = window.jspdf;
+                    const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                    
+                    // Calculate PDF dimensions (convert px to mm, 96 DPI to 72 DPI)
+                    const pdfWidth = (svgWidth * 25.4) / 96;
+                    const pdfHeight = (svgHeight * 25.4) / 96;
+                    
+                    const pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'mm',
+                        format: [pdfWidth, pdfHeight]
+                    });
+                    
+                    // Add image to PDF
+                    const imgData = canvas.toDataURL('image/png');
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    pdf.save('threat-model.pdf');
+                    
+                    // Clean up
+                    URL.revokeObjectURL(svgUrl);
+                    showStatus('PDF exported successfully!', 'success');
+                };
+                
+                img.onerror = function() {
+                    URL.revokeObjectURL(svgUrl);
+                    showStatus('PDF export failed', 'error');
+                };
+                
+                img.src = svgUrl;
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                showStatus('PDF export failed', 'error');
+            }
+        }
+
         // Status functions
         function showStatus(message, type) {
             statusEl.textContent = message;
@@ -542,6 +1059,124 @@
         function hideStatus() {
             statusEl.style.display = 'none';
         }
+
+        // Fullscreen functionality
+        function toggleFullscreen() {
+            isFullscreen = !isFullscreen;
+            
+            if (isFullscreen) {
+                enterFullscreen();
+            } else {
+                exitFullscreen();
+            }
+        }
+
+        function enterFullscreen() {
+            const mermaidElement = diagramContainer.querySelector('.mermaid');
+            if (!mermaidElement) {
+                showStatus('No diagram to display in fullscreen', 'error');
+                return;
+            }
+
+            // Clone the diagram to fullscreen
+            const clonedDiagram = mermaidElement.cloneNode(true);
+            fullscreenDiagram.innerHTML = '';
+            fullscreenDiagram.appendChild(clonedDiagram);
+
+            // Show fullscreen overlay
+            fullscreenOverlay.classList.add('active');
+            
+            // Add pan functionality to fullscreen diagram
+            addPanFunctionalityFullscreen();
+            
+            // Reset zoom and position for fullscreen
+            fullscreenZoom = 1;
+            fullscreenDragOffset = { x: 0, y: 0 };
+            applyZoomFullscreen();
+            
+            showStatusFullscreen('Entered fullscreen mode - ESC to exit', 'success');
+        }
+
+        function exitFullscreen() {
+            fullscreenOverlay.classList.remove('active');
+            isFullscreen = false;
+        }
+
+        function addPanFunctionalityFullscreen() {
+            const mermaidElement = fullscreenDiagram.querySelector('.mermaid');
+            if (!mermaidElement) return;
+
+            mermaidElement.addEventListener('mousedown', startDragFullscreen);
+            mermaidElement.addEventListener('mousemove', dragFullscreen);
+            mermaidElement.addEventListener('mouseup', endDragFullscreen);
+            mermaidElement.addEventListener('mouseleave', endDragFullscreen);
+        }
+
+        function startDragFullscreen(e) {
+            fullscreenDragging = true;
+            fullscreenDragStart.x = e.clientX - fullscreenDragOffset.x;
+            fullscreenDragStart.y = e.clientY - fullscreenDragOffset.y;
+        }
+
+        function dragFullscreen(e) {
+            if (!fullscreenDragging) return;
+            
+            fullscreenDragOffset.x = e.clientX - fullscreenDragStart.x;
+            fullscreenDragOffset.y = e.clientY - fullscreenDragStart.y;
+            
+            const mermaidElement = fullscreenDiagram.querySelector('.mermaid');
+            if (mermaidElement) {
+                mermaidElement.style.transform = `translate(${fullscreenDragOffset.x}px, ${fullscreenDragOffset.y}px) scale(${fullscreenZoom})`;
+            }
+        }
+
+        function endDragFullscreen() {
+            fullscreenDragging = false;
+        }
+
+        // Fullscreen zoom functions
+        function zoomInFullscreen() {
+            fullscreenZoom = Math.min(fullscreenZoom * 1.2, 3);
+            applyZoomFullscreen();
+        }
+
+        function zoomOutFullscreen() {
+            fullscreenZoom = Math.max(fullscreenZoom / 1.2, 0.3);
+            applyZoomFullscreen();
+        }
+
+        function resetZoomFullscreen() {
+            fullscreenZoom = 1;
+            fullscreenDragOffset = { x: 0, y: 0 };
+            applyZoomFullscreen();
+        }
+
+        function applyZoomFullscreen() {
+            const mermaidElement = fullscreenDiagram.querySelector('.mermaid');
+            if (mermaidElement) {
+                mermaidElement.style.transform = `translate(${fullscreenDragOffset.x}px, ${fullscreenDragOffset.y}px) scale(${fullscreenZoom})`;
+            }
+        }
+
+        function showStatusFullscreen(message, type) {
+            fullscreenStatus.textContent = message;
+            fullscreenStatus.className = `fullscreen-status ${type}`;
+            fullscreenStatus.style.display = 'block';
+            
+            setTimeout(() => {
+                fullscreenStatus.style.display = 'none';
+            }, 3000);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && isFullscreen) {
+                toggleFullscreen();
+            } else if (e.key === 'F11') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+        });
 
         // Event listeners
         editor.addEventListener('input', debounce(renderDiagram, 1000));
